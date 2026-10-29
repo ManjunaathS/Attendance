@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Attend · Company attendance and people operations
 
 Attend is a responsive React + Tailwind interface backed by a FastAPI service and PostgreSQL. It includes individual login, role and team scoping, attendance punches and breaks, approval flows, tasks, policies, news/events with event photos, organization chart, and resignation review.
@@ -73,3 +74,6 @@ The current WFH excess default converts approved days above 4/month to Casual Le
 ## Security / production checklist
 
 Use HTTPS, rotate the JWT secret, set secure cookies, restrict allowed origins, back up PostgreSQL and uploaded media, and review retention/consent for location data. The initial Admin is created once; provision further accounts from the protected employee management screens. HR/Admin edits and approvals are recorded in the audit log.
+=======
+# Attendance
+>>>>>>> d126ce430fa32f4d60884b1dd1c802f233a9a15a
