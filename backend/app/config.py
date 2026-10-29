@@ -1,9 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # A backend-local .env is the documented no-Docker development setup.
+    # Load the repository root first so backend/.env can override its values.
+    model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
     database_url: str = "postgresql+psycopg://attend:attend_dev_password@localhost:5432/attend"
     jwt_secret: str = "replace-this-with-a-long-random-secret-before-deployment"
+    neon_auth_base_url: str | None = None
+    neon_auth_jwks_url: str | None = None
     jwt_expire_minutes: int = 480
     cookie_secure: bool = False
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

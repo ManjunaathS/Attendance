@@ -3,7 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
-  "dependencies": { "@vitejs/plugin-react": "latest", "vite": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest" },
-  "devDependencies": { "tailwindcss": "^3.4.17", "postcss": "latest", "autoprefixer": "latest" }
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.5",
+    "@neon/env": "^1.6.6",
+    "@neon/realtime": "^0.1.2",
+    "@neon/realtime-react": "^0.1.1",
+    "@neondatabase/auth": "^0.6.0-beta",
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "^3.4.17"
+  }
 }

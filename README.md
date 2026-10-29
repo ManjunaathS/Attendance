@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Attend · Company attendance and people operations
 
 Attend is a responsive React + Tailwind interface backed by a FastAPI service and PostgreSQL. It includes individual login, role and team scoping, attendance punches and breaks, approval flows, tasks, policies, news/events with event photos, organization chart, and resignation review.
@@ -74,6 +73,15 @@ The current WFH excess default converts approved days above 4/month to Casual Le
 ## Security / production checklist
 
 Use HTTPS, rotate the JWT secret, set secure cookies, restrict allowed origins, back up PostgreSQL and uploaded media, and review retention/consent for location data. The initial Admin is created once; provision further accounts from the protected employee management screens. HR/Admin edits and approvals are recorded in the audit log.
-=======
-# Attendance
->>>>>>> d126ce430fa32f4d60884b1dd1c802f233a9a15a
+
+## Hosting
+
+The repository includes a Docker image for the frontend and a separate Docker image for the API. Deploy the API from `backend/Dockerfile` with the `backend` folder as its build context. The API container runs database migrations and creates the initial Admin account before starting. Configure these environment variables on the API host:
+
+- `DATABASE_URL`: PostgreSQL connection string using the `postgresql+psycopg://` scheme.
+- `JWT_SECRET`: a unique random secret of at least 32 characters.
+- `ATTEND_ADMIN_LOGIN` and `ATTEND_ADMIN_PASSWORD`: the first Admin credentials; the password must be at least 14 characters.
+- `COOKIE_SECURE=true` when serving production traffic over HTTPS.
+- `MEDIA_DIR=/app/media` and a persistent disk mounted at `/app/media` if event photos must survive container restarts.
+
+For a static frontend host, build with `npm ci && npm run build` and publish the `dist` directory. The included `public/_redirects` proxies `/api/*` to the configured Attendrix API service and supports client-side routes. Update its API hostname if your API is hosted at a different URL. The frontend and API should use the same public site origin through this proxy so the session cookie remains first-party. The root `Dockerfile` instead builds the frontend into nginx and proxies API traffic to the `api` service in `docker-compose.yml`.

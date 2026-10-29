@@ -1,10 +1,15 @@
+import asyncio
 import unittest
+from io import BytesIO
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
+from PIL import Image
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,9 +17,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.activities import ActivityCreate
 from app.api.attendance import CheckInBody, CheckOutBody, check_in, check_out, end_break, office_location, start_break
+from app.api.content import EventBody, create_event, list_events, upload_event_photo
 from app.api.requests import Decision, TimeOffCreate, create_request, decide_request
 from app.db import Base
-from app.models import AttendanceBreak, AttendanceDay, AttendanceStatus, Employee, LeaveLedger, LeaveType, RequestStatus, RequestType, Role, Shift, Team, TeamSettings, TimeOffRequest, TimeOffRequestDay, User, WorkMode
+from app.models import AttendanceBreak, AttendanceDay, AttendanceStatus, Employee, LeaveLedger, LeaveType, PublishStatus, RequestStatus, RequestType, Role, Shift, Team, TeamSettings, TimeOffRequest, TimeOffRequestDay, User, WorkMode
 
 
 class AttendanceLocationRulesTests(unittest.TestCase):
@@ -78,7 +84,9 @@ class IsolatedDatabaseWorkflowTests(unittest.TestCase):
         self.team.manager_employee_id = self.manager_employee.id
         self.manager = User(login_id=f"manager-{uuid4()}", password_hash="not-used", role=Role.MANAGER, employee_id=self.manager_employee.id)
         self.user = User(login_id=f"employee-{uuid4()}", password_hash="not-used", role=Role.EMPLOYEE, employee_id=self.employee.id)
-        self.db.add_all([self.manager, self.user])
+        self.hr = User(login_id=f"hr-{uuid4()}", password_hash="not-used", role=Role.HR)
+        self.admin = User(login_id=f"admin-{uuid4()}", password_hash="not-used", role=Role.ADMIN)
+        self.db.add_all([self.manager, self.user, self.hr, self.admin])
         self.shift = Shift(code=f"S-{uuid4()}", name="Test shift", starts_at=time(9, 30), ends_at=time(18, 30))
         self.db.add(self.shift)
         self.db.add(TeamSettings(team_id=self.team.id, enabled_shifts=[self.shift.code]))
@@ -179,6 +187,33 @@ class IsolatedDatabaseWorkflowTests(unittest.TestCase):
             start_break(self.db, self.user)
             with self.assertRaisesRegex(HTTPException, "End your active break"):
                 check_out(CheckOutBody(latitude=13.02348, longitude=80.20446, accuracy_meters=20), self.db, self.user)
+
+    def test_event_optional_time_is_preserved_in_api_response(self):
+        body = EventBody(title="E2E event", description="Event with no displayed time",
+                         starts_at=datetime(2026, 11, 2, 12), time_unspecified=True,
+                         status=PublishStatus.PUBLISHED)
+        event = create_event(body, self.db, self.admin)
+        self.assertEqual(event["status"], "PUBLISHED")
+        listed = list_events(self.db, self.user)
+        row = next(item for item in listed if item["id"] == event["id"])
+        self.assertTrue(row["time_unspecified"])
+
+    def test_event_can_store_and_list_multiple_photos(self):
+        event = create_event(EventBody(title="E2E photo event", starts_at=datetime(2026, 11, 2, 12),
+                                       time_unspecified=True, status=PublishStatus.PUBLISHED), self.db, self.admin)
+        image = Image.new("RGB", (3, 3), color=(55, 110, 150))
+        image_data = BytesIO()
+        image.save(image_data, format="PNG")
+        png = image_data.getvalue()
+        class TestUpload:
+            filename = "test.png"
+            async def read(self, limit):
+                return png[:limit]
+        with TemporaryDirectory() as folder, patch("app.api.content.media_dir", return_value=Path(folder)):
+            first = asyncio.run(upload_event_photo(UUID(event["id"]), TestUpload(), "First photo", self.db, self.admin))
+            second = asyncio.run(upload_event_photo(UUID(event["id"]), TestUpload(), "Second photo", self.db, self.admin))
+            row = next(item for item in list_events(self.db, self.user) if item["id"] == event["id"])
+        self.assertEqual({photo["id"] for photo in row["photos"]}, {first["id"], second["id"]})
 
     def test_employee_leave_request_can_be_approved_by_its_assigned_manager(self):
         leave_type = LeaveType(code="CL", name="Casual Leave")
