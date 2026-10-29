@@ -1,0 +1,9 @@
+node_modules/
+dist/
+backend/.venv/
+backend/.env
+.env
+backend/media/*
+!backend/media/.gitkeep
+__pycache__/
+*.py[cod]

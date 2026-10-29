@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: attend
+      POSTGRES_USER: attend
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-attend_dev_password}
+    ports: ["5432:5432"]
+    volumes: ["attend-postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attend -d attend"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://attend:${POSTGRES_PASSWORD:-attend_dev_password}@db:5432/attend
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080
+      ATTEND_ADMIN_LOGIN: ${ATTEND_ADMIN_LOGIN:?Set ATTEND_ADMIN_LOGIN in .env}
+      ATTEND_ADMIN_PASSWORD: ${ATTEND_ADMIN_PASSWORD:?Set ATTEND_ADMIN_PASSWORD in .env}
+      MEDIA_DIR: /app/media
+      COMPANY_TIMEZONE: Asia/Kolkata
+      FINANCIAL_YEAR_START_MONTH: 4
+    ports: ["8000:8000"]
+    volumes: ["attend-media:/app/media"]
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build: .
+    ports: ["8080:80"]
+    depends_on: [api]
+volumes:
+  attend-postgres-data:
+  attend-media:
