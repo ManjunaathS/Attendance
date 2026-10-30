@@ -43,7 +43,7 @@ def organization_tree(db:Session=Depends(get_db),user:User=Depends(current_user)
     for e in employees:
         key=str(e.team_id) if e.team_id else "unassigned"
         item=teams.setdefault(key,{"team_id":key,"team_name":e.team.name if e.team else "Unassigned","manager_employee_id":str(e.team.manager_employee_id) if e.team and e.team.manager_employee_id else None,"members":[]})
-        item["members"].append({"id":str(e.id),"name":e.full_name,"job_title":e.job_title,"reports_to_employee_id":str(e.reports_to_employee_id) if e.reports_to_employee_id else None,"is_manager":bool(e.team and e.team.manager_employee_id==e.id)})
+        item["members"].append({"id":str(e.id),"name":e.full_name,"job_title":e.job_title,"role":e.user.role.value if e.user else "EMPLOYEE","reports_to_employee_id":str(e.reports_to_employee_id) if e.reports_to_employee_id else None,"is_manager":bool(e.team and e.team.manager_employee_id==e.id)})
     return {"teams":list(teams.values())}
 @router.patch("/teams/{team_id}")
 def update_team(team_id:UUID,body:TeamUpdate,db:Session=Depends(get_db),user:User=Depends(current_user)):

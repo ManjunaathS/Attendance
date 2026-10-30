@@ -39,11 +39,16 @@ def list_employees(db:Session=Depends(get_db), user:User=Depends(current_user)):
 def create_employee(body:EmployeeCreate,db:Session=Depends(get_db),user:User=Depends(roles("ADMIN","HR"))):
     from .auth import hasher
     if body.role==Role.ADMIN and user.role!=Role.ADMIN: raise HTTPException(403,"Only Admin can create an Admin account")
-    if body.team_id and not db.get(Team,body.team_id):raise HTTPException(422,"Unknown team")
+    team=db.get(Team,body.team_id) if body.team_id else None
+    if body.team_id and not team:raise HTTPException(422,"Unknown team")
+    if body.role==Role.MANAGER and team and team.manager_employee_id:
+        raise HTTPException(409,"This team already has a Manager. Choose another team or assign the new Manager later.")
     e=Employee(employee_number=body.employee_number,full_name=body.full_name,work_email=body.work_email,job_title=body.job_title,team_id=body.team_id,reports_to_employee_id=body.reports_to_employee_id,join_date=body.join_date,timezone=body.timezone)
     db.add(e);db.flush()
     u=User(login_id=body.login_id,password_hash=hasher.hash(body.temporary_password),role=body.role,employee_id=e.id,is_active=True)
-    db.add(u);db.commit();db.refresh(e)
+    db.add(u)
+    if body.role==Role.MANAGER and team:team.manager_employee_id=e.id
+    db.commit();db.refresh(e)
     return {"id":str(e.id),"user_id":str(u.id),"full_name":e.full_name,"role":u.role.value}
 @router.patch("/employees/{employee_id}")
 def update_employee(employee_id:UUID,body:dict,db:Session=Depends(get_db),user:User=Depends(roles("ADMIN","HR"))):
@@ -97,6 +102,11 @@ def update_employee(employee_id:UUID,body:dict,db:Session=Depends(get_db),user:U
         if new_role==Role.ADMIN:raise HTTPException(422,"Admin role cannot be assigned through employee role editing")
         if e.user.role==Role.MANAGER and new_role!=Role.MANAGER and db.query(Team).filter_by(manager_employee_id=e.id).first():
             raise HTTPException(409,"Assign another team manager before changing this Manager account's role")
+        if new_role==Role.MANAGER and e.team_id:
+            team=db.get(Team,e.team_id)
+            if team and team.manager_employee_id not in {None,e.id}:
+                raise HTTPException(409,"This team already has a Manager. Assign the employee to another team before changing the role.")
+            if team:team.manager_employee_id=e.id
         old_role=e.user.role.value;e.user.role=new_role
         audit(db,user,"EMPLOYEE_ROLE_CHANGED","Employee",e.id,before={"role":old_role},after={"role":new_role.value})
     for k in ("full_name","phone","job_title","reports_to_employee_id","employment_status","timezone"):

@@ -78,6 +78,21 @@ def update_event(event_id:UUID,body:EventBody,db:Session=Depends(get_db),user:Us
     e.title=body.title;e.description=body.description;e.starts_at=body.starts_at;e.time_unspecified=body.time_unspecified;e.ends_at=body.ends_at;e.location=body.location;e.status=body.status
     if e.status==PublishStatus.PUBLISHED and not e.published_at:e.published_at=datetime.now(timezone.utc)
     audit(db,user,"EVENT_UPDATED","Event",e.id,after={"title":e.title});db.commit();return {"id":str(e.id),"title":e.title,"status":e.status.value}
+@router.delete("/events/{event_id}",status_code=204)
+def delete_event(event_id:UUID,db:Session=Depends(get_db),user:User=Depends(roles("HR","ADMIN"))):
+    event=db.get(Event,event_id)
+    if not event:raise HTTPException(404,"Event not found")
+    root=media_dir()
+    media_paths=[]
+    for media in event.media:
+        path=(root/media.object_key).resolve()
+        if path.is_relative_to(root):media_paths.append(path)
+    audit(db,user,"EVENT_DELETED","Event",event.id,before={"title":event.title})
+    db.delete(event);db.commit()
+    for path in media_paths:
+        try:path.unlink(missing_ok=True)
+        except OSError:pass
+    return None
 @router.post("/events/{event_id}/media",status_code=201)
 async def upload_event_photo(event_id:UUID,file:UploadFile=File(...),caption:str|None=None,db:Session=Depends(get_db),user:User=Depends(roles("HR","ADMIN"))):
     event=db.get(Event,event_id)
