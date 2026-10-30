@@ -1,13 +1,279 @@
-import { useState } from 'react'
-import { Check,LogOut,UserRound } from 'lucide-react'
-import { post } from '../api'
-import { Badge,Button,Empty,Heading,Modal,Panel,SectionHead,Notice } from '../ui'
-import useResource from '../useResource'
-export default function Resignation({account,role,refresh,refreshAll,notify,onModal}){
- const {data:items=[]}=useResource('/resignations',refresh),[show,setShow]=useState(false),[fallback,setFallback]=useState(null)
- async function submit(e){e.preventDefault();const f=new FormData(e.currentTarget);try{await post('/resignations',{proposed_last_day:f.get('last_day'),reason:f.get('reason')||null});setShow(false);refreshAll();notify('Resignation sent to your team manager and HR review workflow.')}catch(err){notify(err.message)}}
- async function delegate(e){e.preventDefault();const f=new FormData(e.currentTarget);try{await post(`/resignations/${fallback.id}/delegate-to-hr`,{reason:f.get('reason')});setFallback(null);refreshAll();notify('Manager review delegated to HR with the recorded reason.')}catch(err){notify(err.message)}}
- function decide(item,step,decision){onModal({kind:'decision',decision,item:{...item,type:`Resignation · ${step} review`,step,employee_name:item.employee_name},success:`Resignation ${step.toLowerCase()} review ${decision.toLowerCase()}.`,action:()=>post(`/resignations/${item.id}/decision`,{step,decision})})}
- const canManager=r=>role==='ADMIN'||(role==='MANAGER'&&r.manager_id===account.id)||role==='HR'&&r.approvals?.find(x=>x.step==='MANAGER')?.status==='DELEGATED'
- return <><Heading title="Resignation" description={role==='EMPLOYEE'?'Submit a resignation request and follow its two-step review.':'Review resignation requests in your approval scope.'} actions={role==='EMPLOYEE'&&<Button tone="primary" onClick={()=>setShow(true)}>Submit resignation</Button>}/><Panel><SectionHead title={role==='EMPLOYEE'?'My requests':'Resignation requests'} subtitle="Manager review and HR review are both required for final approval."/>{items.map(r=>{const managerStep=r.approvals?.find(x=>x.step==='MANAGER'),hrStep=r.approvals?.find(x=>x.step==='HR');return <article className="resignation-row" key={r.id}><span className="request-icon"><LogOut size={16}/></span><div className="request-info"><b>{r.employee_name} · Proposed last day {r.proposed_last_day}</b><small>{r.reason||'No reason provided'}</small><div className="approval-track"><span><Badge tone={managerStep?.status==='APPROVED'?'green':managerStep?.status==='REJECTED'?'red':'amber'}>Manager · {managerStep?.status||'PENDING'}</Badge></span><span><Badge tone={hrStep?.status==='APPROVED'?'green':hrStep?.status==='REJECTED'?'red':'amber'}>HR · {hrStep?.status||'PENDING'}</Badge></span><span><Badge tone={r.status==='APPROVED'?'green':r.status==='REJECTED'?'red':'gray'}>{r.status}</Badge></span></div></div><div className="resignation-actions">{r.status==='PENDING_MANAGER'&&canManager(r)&&<><Button tone="approve" onClick={()=>decide(r,'MANAGER','APPROVED')}>Manager approve</Button><Button tone="reject" onClick={()=>decide(r,'MANAGER','REJECTED')}>Reject</Button></>}{r.status==='PENDING_MANAGER'&&role==='HR'&&managerStep?.status!=='DELEGATED'&&<Button onClick={()=>setFallback(r)}>Delegate manager step</Button>}{r.status==='PENDING_HR'&&(role==='HR'||role==='ADMIN')&&<><Button tone="approve" onClick={()=>decide(r,'HR','APPROVED')}>HR approve</Button><Button tone="reject" onClick={()=>decide(r,'HR','REJECTED')}>Reject</Button></>}</div></article>})}{!items.length&&<Empty>No resignation requests.</Empty>}</Panel><Panel><SectionHead title="Approval steps"/><div className="approval-track large"><div><span className="step-number">1</span><b>Team manager</b><small>Review and approve/reject</small></div><div><span className="step-number">2</span><b>HR</b><small>Second required approval</small></div><div><span className="step-number">3</span><b>Employee notified</b><small>Final decision recorded</small></div></div></Panel>{show&&<Modal title="Submit resignation" description="Your request is routed to your team manager, followed by HR." onClose={()=>setShow(false)}><form className="form" onSubmit={submit}><label>Proposed last working day<input type="date" name="last_day" min={new Date().toISOString().slice(0,10)} required/></label><label>Reason (optional)<textarea name="reason"/></label><div className="modal-actions"><Button onClick={()=>setShow(false)}>Cancel</Button><Button type="submit" tone="primary">Submit request</Button></div></form></Modal>}{fallback&&<Modal title="Delegate manager review to HR" description={`Request by ${fallback.employee_name}`} onClose={()=>setFallback(null)}><form className="form" onSubmit={delegate}><label>Fallback reason<textarea name="reason" required minLength={5} placeholder="Manager is on leave / unavailable…"/></label><Notice>This records the original manager, HR reviewer, and reason. Detection is manual for now.</Notice><div className="modal-actions"><Button onClick={()=>setFallback(null)}>Cancel</Button><Button type="submit" tone="primary">Delegate to HR</Button></div></form></Modal>}</>
+import { useState } from "react";
+import { Check, LogOut, UserRound } from "lucide-react";
+import { post } from "../api";
+import {
+  Badge,
+  Button,
+  Empty,
+  Heading,
+  Modal,
+  Panel,
+  SectionHead,
+  Notice,
+} from "../ui";
+import useResource from "../useResource";
+export default function Resignation({
+  account,
+  role,
+  refresh,
+  refreshAll,
+  notify,
+  onModal,
+}) {
+  const { data: items = [] } = useResource("/resignations", refresh),
+    [show, setShow] = useState(false),
+    [fallback, setFallback] = useState(null);
+  async function submit(e) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    try {
+      await post("/resignations", {
+        proposed_last_day: f.get("last_day"),
+        reason: f.get("reason") || null,
+      });
+      setShow(false);
+      refreshAll();
+      notify("Resignation sent to your team manager and HR review workflow.");
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+  async function delegate(e) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    try {
+      await post(`/resignations/${fallback.id}/delegate-to-hr`, {
+        reason: f.get("reason"),
+      });
+      setFallback(null);
+      refreshAll();
+      notify("Manager review delegated to HR with the recorded reason.");
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+  function decide(item, step, decision) {
+    onModal({
+      kind: "decision",
+      decision,
+      item: {
+        ...item,
+        type: `Resignation · ${step} review`,
+        step,
+        employee_name: item.employee_name,
+      },
+      success: `Resignation ${step.toLowerCase()} review ${decision.toLowerCase()}.`,
+      action: () =>
+        post(`/resignations/${item.id}/decision`, { step, decision }),
+    });
+  }
+  const canManager = (r) =>
+    role === "ADMIN" ||
+    (role === "MANAGER" && r.manager_id === account.id) ||
+    (role === "HR" &&
+      r.approvals?.find((x) => x.step === "MANAGER")?.status === "DELEGATED");
+  return (
+    <>
+      <Heading
+        title="Resignation"
+        description={
+          role === "EMPLOYEE"
+            ? "Submit a resignation request."
+            : "Review resignation requests in your approval scope."
+        }
+        actions={
+          role === "EMPLOYEE" && (
+            <Button tone="primary" onClick={() => setShow(true)}>
+              Submit resignation
+            </Button>
+          )
+        }
+      />
+      <Panel>
+        <SectionHead
+          title={role === "EMPLOYEE" ? "My requests" : "Resignation requests"}
+          subtitle="Manager review and HR review are both required for final approval."
+        />
+        {items.map((r) => {
+          const managerStep = r.approvals?.find((x) => x.step === "MANAGER"),
+            hrStep = r.approvals?.find((x) => x.step === "HR");
+          return (
+            <article className="resignation-row" key={r.id}>
+              <span className="request-icon">
+                <LogOut size={16} />
+              </span>
+              <div className="request-info">
+                <b>
+                  {r.employee_name} · Proposed last day {r.proposed_last_day}
+                </b>
+                <small>{r.reason || "No reason provided"}</small>
+                <div className="approval-track">
+                  <span>
+                    <Badge
+                      tone={
+                        managerStep?.status === "APPROVED"
+                          ? "green"
+                          : managerStep?.status === "REJECTED"
+                            ? "red"
+                            : "amber"
+                      }
+                    >
+                      Manager · {managerStep?.status || "PENDING"}
+                    </Badge>
+                  </span>
+                  <span>
+                    <Badge
+                      tone={
+                        hrStep?.status === "APPROVED"
+                          ? "green"
+                          : hrStep?.status === "REJECTED"
+                            ? "red"
+                            : "amber"
+                      }
+                    >
+                      HR · {hrStep?.status || "PENDING"}
+                    </Badge>
+                  </span>
+                  <span>
+                    <Badge
+                      tone={
+                        r.status === "APPROVED"
+                          ? "green"
+                          : r.status === "REJECTED"
+                            ? "red"
+                            : "gray"
+                      }
+                    >
+                      {r.status}
+                    </Badge>
+                  </span>
+                </div>
+              </div>
+              <div className="resignation-actions">
+                {r.status === "PENDING_MANAGER" && canManager(r) && (
+                  <>
+                    <Button
+                      tone="approve"
+                      onClick={() => decide(r, "MANAGER", "APPROVED")}
+                    >
+                      Manager approve
+                    </Button>
+                    <Button
+                      tone="reject"
+                      onClick={() => decide(r, "MANAGER", "REJECTED")}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                )}
+                {r.status === "PENDING_MANAGER" &&
+                  role === "HR" &&
+                  managerStep?.status !== "DELEGATED" && (
+                    <Button onClick={() => setFallback(r)}>
+                      Delegate manager step
+                    </Button>
+                  )}
+                {r.status === "PENDING_HR" &&
+                  (role === "HR" || role === "ADMIN") && (
+                    <>
+                      <Button
+                        tone="approve"
+                        onClick={() => decide(r, "HR", "APPROVED")}
+                      >
+                        HR approve
+                      </Button>
+                      <Button
+                        tone="reject"
+                        onClick={() => decide(r, "HR", "REJECTED")}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  )}
+              </div>
+            </article>
+          );
+        })}
+        {!items.length && <Empty>No resignation requests.</Empty>}
+      </Panel>
+      <Panel>
+        <SectionHead title="Approval steps" />
+        <div className="approval-track large">
+          <div>
+            <span className="step-number">1</span>
+            <b>Team manager</b>
+            <small>Review and approve/reject</small>
+          </div>
+          <div>
+            <span className="step-number">2</span>
+            <b>HR</b>
+            <small>Second required approval</small>
+          </div>
+          <div>
+            <span className="step-number">3</span>
+            <b>Employee notified</b>
+            <small>Final decision recorded</small>
+          </div>
+        </div>
+      </Panel>
+      {show && (
+        <Modal
+          title="Submit resignation"
+          description="Your request is routed to your team manager, followed by HR."
+          onClose={() => setShow(false)}
+        >
+          <form className="form" onSubmit={submit}>
+            <label>
+              Proposed last working day
+              <input
+                type="date"
+                name="last_day"
+                min={new Date().toISOString().slice(0, 10)}
+                required
+              />
+            </label>
+            <label>
+              Reason (optional)
+              <textarea name="reason" />
+            </label>
+            <div className="modal-actions">
+              <Button onClick={() => setShow(false)}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Submit request
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {fallback && (
+        <Modal
+          title="Delegate manager review to HR"
+          description={`Request by ${fallback.employee_name}`}
+          onClose={() => setFallback(null)}
+        >
+          <form className="form" onSubmit={delegate}>
+            <label>
+              Fallback reason
+              <textarea
+                name="reason"
+                required
+                minLength={5}
+                placeholder="Manager is on leave / unavailable…"
+              />
+            </label>
+            <Notice>
+              This records the original manager, HR reviewer, and reason.
+              Detection is manual for now.
+            </Notice>
+            <div className="modal-actions">
+              <Button onClick={() => setFallback(null)}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Delegate to HR
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
 }

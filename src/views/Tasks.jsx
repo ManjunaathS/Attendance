@@ -1,15 +1,213 @@
-import { useState } from 'react'
-import { ListTodo,Plus,Search } from 'lucide-react'
-import { get,patch,post } from '../api'
-import { Badge,Button,Empty,Heading,Modal,Panel,SectionHead } from '../ui'
-import useResource from '../useResource'
-import { TaskRow } from './shared'
-export default function Tasks({role,refresh,refreshAll,notify}){
- const {data:tasks=[]}=useResource('/tasks',refresh),{data:people=[]}=useResource('/employees',refresh,role==='MANAGER'||role==='ADMIN')
- const [show,setShow]=useState(false),[wait,setWait]=useState(null),[reason,setReason]=useState(''),[query,setQuery]=useState('')
- async function assign(e){e.preventDefault();const f=new FormData(e.currentTarget);try{const result=await post('/tasks',{title:f.get('title'),assignee_id:f.get('assignee_id'),description:f.get('description')||null,due_date:f.get('due_date')||null,priority:f.get('priority')});setShow(false);refreshAll();notify(`Task assigned to ${result.assignee}.`)}catch(x){notify(x.message)}}
- async function update(task,status){if(status==='PENDING'){setWait(task);return}try{await patch(`/tasks/${task.id}`,{status});refreshAll();notify(`Task status changed to ${status.toLowerCase().replace('_',' ')}.`)}catch(e){notify(e.message)}}
- async function submitPending(e){e.preventDefault();try{await patch(`/tasks/${wait.id}`,{status:'PENDING',pending_reason:reason});setWait(null);refreshAll();notify('Task marked Pending with a reason.')}catch(e){notify(e.message)}}
- const visible=tasks.filter(t=>`${t.title} ${t.assignee}`.toLowerCase().includes(query.toLowerCase()))
- return <><Heading title="Task Manager" description={role==='EMPLOYEE'?'Tasks assigned to you and their progress.':'Assign work and monitor your team’s progress.'} actions={(role==='MANAGER'||role==='ADMIN')&&<Button tone="primary" onClick={()=>setShow(true)}><Plus size={15}/> Assign task</Button>}/><Panel><SectionHead title={role==='EMPLOYEE'?'My tasks':role==='MANAGER'?'My team tasks':'Company tasks'} subtitle={`${visible.length} tasks`}/><div className="filters"><label className="search"><Search size={16}/><input placeholder="Search tasks" value={query} onChange={e=>setQuery(e.target.value)}/></label></div>{visible.map(t=><div className="task-edit-row" key={t.id}><TaskRow task={t}/>{(role==='EMPLOYEE'&&t.assignee_id)||(role==='MANAGER'&&t.team_id)||role==='ADMIN'?<select className="control compact" value={t.status} onChange={e=>update(t,e.target.value)}>{['NOT_STARTED','IN_PROGRESS','PENDING','COMPLETED'].map(s=><option key={s}>{s}</option>)}</select>:null}</div>)}{!visible.length&&<Empty>No tasks match this view.</Empty>}</Panel>{show&&<Modal title="Assign a task" description="Manager assignments stay inside their team. Admin can assign company-wide." onClose={()=>setShow(false)}><form className="form" onSubmit={assign}><label>Task title<input name="title" maxLength="180" required/></label><label>Assign to<select name="assignee_id" required><option value="">Select employee</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name} · {p.job_title}</option>)}</select></label><div className="form-row"><label>Due date<input name="due_date" type="date"/></label><label>Priority<select name="priority"><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select></label></div><label>Details<textarea name="description"/></label><div className="modal-actions"><Button onClick={()=>setShow(false)}>Cancel</Button><Button type="submit" tone="primary">Assign task</Button></div></form></Modal>}{wait&&<Modal title="Why is this task pending?" description={wait.title} onClose={()=>setWait(null)}><form className="form" onSubmit={submitPending}><label>Waiting reason<textarea value={reason} onChange={e=>setReason(e.target.value)} minLength={3} required placeholder="Waiting for approval or clarification…"/></label><div className="modal-actions"><Button onClick={()=>setWait(null)}>Cancel</Button><Button type="submit" tone="primary">Save reason</Button></div></form></Modal>}</>
+import { useState } from "react";
+import { ListTodo, Plus, Search } from "lucide-react";
+import { get, patch, post } from "../api";
+import {
+  Badge,
+  Button,
+  Empty,
+  Heading,
+  Modal,
+  Panel,
+  SectionHead,
+} from "../ui";
+import useResource from "../useResource";
+import { TaskRow } from "./shared";
+export default function Tasks({ role, refresh, refreshAll, notify }) {
+  const { data: tasks = [] } = useResource("/tasks", refresh),
+    { data: people = [] } = useResource(
+      "/employees",
+      refresh,
+      role === "MANAGER" || role === "ADMIN",
+    );
+  const [show, setShow] = useState(false),
+    [wait, setWait] = useState(null),
+    [reason, setReason] = useState(""),
+    [query, setQuery] = useState("");
+  async function assign(e) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    try {
+      const result = await post("/tasks", {
+        title: f.get("title"),
+        assignee_id: f.get("assignee_id"),
+        description: f.get("description") || null,
+        due_date: f.get("due_date") || null,
+        priority: f.get("priority"),
+      });
+      setShow(false);
+      refreshAll();
+      notify(`Task assigned to ${result.assignee}.`);
+    } catch (x) {
+      notify(x.message);
+    }
+  }
+  async function update(task, status) {
+    if (status === "PENDING") {
+      setWait(task);
+      return;
+    }
+    try {
+      await patch(`/tasks/${task.id}`, { status });
+      refreshAll();
+      notify(
+        `Task status changed to ${status.toLowerCase().replace("_", " ")}.`,
+      );
+    } catch (e) {
+      notify(e.message);
+    }
+  }
+  async function submitPending(e) {
+    e.preventDefault();
+    try {
+      await patch(`/tasks/${wait.id}`, {
+        status: "PENDING",
+        pending_reason: reason,
+      });
+      setWait(null);
+      refreshAll();
+      notify("Task marked Pending with a reason.");
+    } catch (e) {
+      notify(e.message);
+    }
+  }
+  const visible = tasks.filter((t) =>
+    `${t.title} ${t.assignee}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <>
+      <Heading
+        title="Task Manager"
+        description={
+          role === "EMPLOYEE"
+            ? "Tasks assigned to you and their progress."
+            : "Assign work and monitor your team’s progress."
+        }
+        actions={
+          (role === "MANAGER" || role === "ADMIN") && (
+            <Button tone="primary" onClick={() => setShow(true)}>
+              <Plus size={15} /> Assign task
+            </Button>
+          )
+        }
+      />
+      <Panel>
+        <SectionHead
+          title={
+            role === "EMPLOYEE"
+              ? "My tasks"
+              : role === "MANAGER"
+                ? "My team tasks"
+                : "Company tasks"
+          }
+          subtitle={`${visible.length} tasks`}
+        />
+        <div className="filters">
+          <label className="search">
+            <Search size={16} />
+            <input
+              placeholder="Search tasks"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+        </div>
+        {visible.map((t) => (
+          <div className="task-edit-row" key={t.id}>
+            <TaskRow task={t} />
+            {(role === "EMPLOYEE" && t.assignee_id) ||
+            (role === "MANAGER" && t.team_id) ||
+            role === "ADMIN" ? (
+              <select
+                className="control compact"
+                value={t.status}
+                onChange={(e) => update(t, e.target.value)}
+              >
+                {["NOT_STARTED", "IN_PROGRESS", "PENDING", "COMPLETED"].map(
+                  (s) => (
+                    <option key={s}>{s}</option>
+                  ),
+                )}
+              </select>
+            ) : null}
+          </div>
+        ))}
+        {!visible.length && <Empty>No tasks match this view.</Empty>}
+      </Panel>
+      {show && (
+        <Modal
+          title="Assign a task"
+          description="Manager assignments stay inside their team. Admin can assign company-wide."
+          onClose={() => setShow(false)}
+        >
+          <form className="form" onSubmit={assign}>
+            <label>
+              Task title
+              <input name="title" maxLength="180" required />
+            </label>
+            <label>
+              Assign to
+              <select name="assignee_id" required>
+                <option value="">Select employee</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name} · {p.job_title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="form-row">
+              <label>
+                Due date
+                <input name="due_date" type="date" />
+              </label>
+              <label>
+                Priority
+                <select name="priority">
+                  <option>NORMAL</option>
+                  <option>HIGH</option>
+                  <option>URGENT</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Details
+              <textarea name="description" />
+            </label>
+            <div className="modal-actions">
+              <Button onClick={() => setShow(false)}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Assign task
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {wait && (
+        <Modal
+          title="Why is this task pending?"
+          description={wait.title}
+          onClose={() => setWait(null)}
+        >
+          <form className="form" onSubmit={submitPending}>
+            <label>
+              Waiting reason
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                minLength={3}
+                required
+                placeholder="Waiting for approval or clarification…"
+              />
+            </label>
+            <div className="modal-actions">
+              <Button onClick={() => setWait(null)}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Save reason
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
 }

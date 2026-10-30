@@ -1,14 +1,513 @@
-import { useState } from 'react'
-import { CalendarDays,Plus } from 'lucide-react'
-import { post } from '../api'
-import { Badge,Button,Empty,Heading,Modal,Notice,Panel,SectionHead,fmtDate,mins } from '../ui'
-import useResource from '../useResource'
-import { RequestDecision } from './shared'
-export default function TimeOff({account,role,refresh,refreshAll,notify,onModal}){
- const {data:balance}=useResource('/time-off/balances/me',refresh,Boolean(account.employee_id)),{data:requests=[]}=useResource('/time-off/requests',refresh)
- const [form,setForm]=useState(''),[filter,setFilter]=useState('ALL'),[fallback,setFallback]=useState(null),[f,setF]=useState({leave_code:'CL',start_date:'',end_date:'',duration:'1',half_day_period:'FIRST_HALF',half_day_start:'09:30',half_day_end:'13:30',permission_minutes:30,reason:''})
- const update=(k,v)=>setF(x=>({...x,[k]:v}));const visible=requests.filter(r=>filter==='ALL'||r.status===filter)
- async function delegateToHr(e){e.preventDefault();const data=new FormData(e.currentTarget);try{await post(`/time-off/requests/${fallback.id}/delegate-to-hr`,{reason:data.get('reason')});setFallback(null);refreshAll();notify('Request delegated to HR for manager-unavailable review.')}catch(err){notify(err.message)}}
- async function submit(e){e.preventDefault();let kind=form;let body={request_type:kind==='WFH'?'WFH':kind==='PERMISSION'?'PERMISSION':'LEAVE',start_date:f.start_date,end_date:f.end_date||f.start_date,reason:f.reason};if(kind==='LEAVE')Object.assign(body,{leave_code:f.leave_code,duration_days:f.duration==='0.5'?0.5:Math.floor((new Date(`${f.end_date}T12:00:00`)-new Date(`${f.start_date}T12:00:00`))/86400000)+1,half_day_period:f.duration==='0.5'?f.half_day_period:null,half_day_start:f.duration==='0.5'?f.half_day_start:null,half_day_end:f.duration==='0.5'?f.half_day_end:null});if(kind==='PERMISSION')Object.assign(body,{permission_minutes:Number(f.permission_minutes),duration_days:1});if(kind==='WFH')Object.assign(body,{duration_days:Math.floor((new Date(`${f.end_date}T12:00:00`)-new Date(`${f.start_date}T12:00:00`))/86400000)+1});try{await post('/time-off/requests',body);setForm('');refreshAll();notify(`${kind==='WFH'?'WFH':kind==='PERMISSION'?'Permission':'Leave'} request submitted.`)}catch(e){notify(e.message)}}
- return <><Heading title="Leave, permission & WFH" description="Submit requests and track your balances separately." actions={<><Button tone="primary" onClick={()=>setForm('LEAVE')}><Plus size={15}/> New leave</Button><Button onClick={()=>setForm('PERMISSION')}>Request permission</Button><Button onClick={()=>setForm('WFH')}>Request WFH</Button></>}/><div className="two-col"><div className="stack">{balance&&<Panel className="balance-panel"><div className="eyebrow">FINANCIAL YEAR · {new Date().getFullYear()}–{new Date().getFullYear()+1}</div><strong>{((balance.casual_leave_days||0)+(balance.sick_leave_days||0)).toFixed(1)} <small>days available</small></strong><div className="balance-split"><span>CASUAL LEAVE<b>{balance.casual_leave_days} days</b></span><span>SICK LEAVE<b>{balance.sick_leave_days} days</b></span></div></Panel>}<Panel><SectionHead title={role==='EMPLOYEE'?'My requests':'Requests and approvals'} subtitle={role==='MANAGER'?'Your assigned team':role==='HR'?'Company requests · fallback decisions only':role==='ADMIN'?'Full company access':'Request status and approval history'} action={<select className="control compact" value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">All statuses</option><option value="PENDING_MANAGER">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>}/>{visible.map(r=><div className="request-row" key={r.id}><span className="request-icon"><CalendarDays size={16}/></span><div className="request-info"><b>{r.type==='LEAVE'?`${r.leave_code==='CL'?'Casual':'Sick'} leave`:r.type==='WFH'?'Work from home':'Permission'} · {role==='EMPLOYEE'?'You':r.employee_name}</b><small>{fmtDate(r.start_date)}{r.end_date!==r.start_date?` – ${fmtDate(r.end_date)}`:''}{r.duration_days===0.5?` · Half day ${r.half_day_period?.replace('_',' ').toLowerCase()} · ${r.half_day_start}–${r.half_day_end}`:''}{r.permission_minutes?` · ${mins(r.permission_minutes)}`:''} · {r.reason}</small>{r.manager_unavailable&&<small className="fallback-note">HR fallback · {r.fallback_reason}</small>}</div><div className="request-actions"><Badge tone={r.status==='APPROVED'?'green':r.status==='REJECTED'?'red':'amber'}>{r.status}</Badge><RequestDecision item={r} account={account} role={role} onModal={onModal} endpoint={`/time-off/requests/${r.id}/decision`}/>{(role==='HR'||role==='ADMIN')&&r.status==='PENDING_MANAGER'&&!r.manager_unavailable&&<Button onClick={()=>setFallback(r)}>Delegate to HR</Button>}</div></div>)}{!visible.length&&<Empty>No requests to show.</Empty>}</Panel></div><aside className="stack"><Panel><SectionHead title="Monthly allowances" subtitle={balance?.as_of?.slice(0,7)}/><div className="allowance-row"><span>Permission</span><b>{mins(balance?.permission_minutes_remaining)} remaining / 2h</b></div><div className="progress"><i style={{width:`${Math.min(100,(balance?.permission_minutes_used||0)/120*100)}%`}}/></div><div className="allowance-row"><span>Work from home</span><b>{balance?.wfh_days_used??0} / 4 days used</b></div><div className="progress green"><i style={{width:`${Math.min(100,(balance?.wfh_days_used||0)/4*100)}%`}}/></div><p className="small-note">Permission is independent of leave and WFH. Submit WFH in advance; manager sets the team cutoff.</p></Panel><Panel><SectionHead title="Leave rules"/><div className="policy-row"><span>Monthly accrual</span><b>0.5 CL + 0.5 SL</b></div><div className="policy-row"><span>Carry</span><b>Within FY; tenure rule at FY close</b></div><div className="policy-row"><span>Full day</span><b>Apply before date</b></div><div className="policy-row"><span>Half day</span><b>Same day, timing required</b></div><div className="policy-row"><span>Multi-day leave</span><b>Full days only</b></div></Panel></aside></div>{fallback&&<Modal title="Delegate request to HR" description={`${fallback.employee_name} · ${fallback.type} · ${fmtDate(fallback.start_date)}`} onClose={()=>setFallback(null)}><form className="form" onSubmit={delegateToHr}><label>Why is the team manager unavailable?<textarea name="reason" minLength={5} required placeholder="Manager is on leave / unavailable…"/></label><div className="modal-actions"><Button onClick={()=>setFallback(null)}>Cancel</Button><Button type="submit" tone="primary">Delegate to HR</Button></div></form></Modal>}{form&&<Modal title={form==='WFH'?'Request work from home':form==='PERMISSION'?'Request permission':'New leave request'} description="Manager approval is the normal route; HR approves only after explicit fallback delegation." onClose={()=>setForm('')}><form className="form" onSubmit={submit}>{form==='LEAVE'&&<><label>Leave type<select value={f.leave_code} onChange={e=>update('leave_code',e.target.value)}><option value="CL">Casual leave (CL)</option><option value="SL">Sick leave (SL)</option></select></label><div className="form-row"><label>Start date<input type="date" value={f.start_date} onChange={e=>{update('start_date',e.target.value);if(!f.end_date)update('end_date',e.target.value)}} required/></label><label>End date<input type="date" value={f.end_date} onChange={e=>update('end_date',e.target.value)} required/></label></div><label>Duration<select value={f.duration} onChange={e=>update('duration',e.target.value)}><option value="1">Full day(s)</option><option value="0.5">Half day · single date</option></select></label>{f.duration==='0.5'&&<><label>Half-day period<select value={f.half_day_period} onChange={e=>update('half_day_period',e.target.value)}><option value="FIRST_HALF">First half</option><option value="SECOND_HALF">Second half</option></select></label><div className="form-row"><label>From<input type="time" value={f.half_day_start} onChange={e=>update('half_day_start',e.target.value)} required/></label><label>To<input type="time" value={f.half_day_end} onChange={e=>update('half_day_end',e.target.value)} required/></label></div><Notice>Same-day half-day leave requires approval before the leave starts.</Notice></>}</>}{form==='PERMISSION'&&<><label>Date<input type="date" value={f.start_date} onChange={e=>update('start_date',e.target.value)} required/></label><label>Duration (minutes)<input type="number" min="1" max="1440" value={f.permission_minutes} onChange={e=>update('permission_minutes',e.target.value)} required/></label><Notice>2 hours per month are available without deduction. Excess is settled under the company’s leave/payroll rule.</Notice></>}{form==='WFH'&&<><div className="form-row"><label>Start date<input type="date" value={f.start_date} onChange={e=>update('start_date',e.target.value)} required/></label><label>End date<input type="date" value={f.end_date} onChange={e=>update('end_date',e.target.value)} required/></label></div><Notice>Request before the date and within your team’s advance cutoff. Limit is 4 days/month. Approved excess days are converted to Casual Leave. Approved WFH check-in does not collect location.</Notice></>}<label>Reason<textarea value={f.reason} onChange={e=>update('reason',e.target.value)} minLength={5} required/></label><div className="modal-actions"><Button onClick={()=>setForm('')}>Cancel</Button><Button type="submit" tone="primary">Submit for approval</Button></div></form></Modal>}</>
+import { useState } from "react";
+import { CalendarDays, Plus } from "lucide-react";
+import { post } from "../api";
+import {
+  Badge,
+  Button,
+  Empty,
+  Heading,
+  Modal,
+  Notice,
+  Panel,
+  SectionHead,
+  fmtDate,
+  mins,
+} from "../ui";
+import useResource from "../useResource";
+import { RequestDecision } from "./shared";
+export default function TimeOff({
+  account,
+  role,
+  refresh,
+  refreshAll,
+  notify,
+  onModal,
+}) {
+  const { data: balance } = useResource(
+      "/time-off/balances/me",
+      refresh,
+      Boolean(account.employee_id),
+    ),
+    { data: requests = [] } = useResource("/time-off/requests", refresh);
+  const [form, setForm] = useState(""),
+    [filter, setFilter] = useState("ALL"),
+    [fallback, setFallback] = useState(null),
+    [f, setF] = useState({
+      leave_code: "CL",
+      start_date: "",
+      end_date: "",
+      duration: "1",
+      half_day_period: "FIRST_HALF",
+      half_day_start: "09:30",
+      half_day_end: "13:30",
+      permission_minutes: 30,
+      reason: "",
+    });
+  const update = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const visible = requests.filter(
+    (r) => filter === "ALL" || r.status === filter,
+  );
+  async function delegateToHr(e) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    try {
+      await post(`/time-off/requests/${fallback.id}/delegate-to-hr`, {
+        reason: data.get("reason"),
+      });
+      setFallback(null);
+      refreshAll();
+      notify("Request delegated to HR for manager-unavailable review.");
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+  async function submit(e) {
+    e.preventDefault();
+    let kind = form;
+    let body = {
+      request_type:
+        kind === "WFH" ? "WFH" : kind === "PERMISSION" ? "PERMISSION" : "LEAVE",
+      start_date: f.start_date,
+      end_date: f.end_date || f.start_date,
+      reason: f.reason,
+    };
+    if (kind === "LEAVE")
+      Object.assign(body, {
+        leave_code: f.leave_code,
+        duration_days:
+          f.duration === "0.5"
+            ? 0.5
+            : Math.floor(
+                (new Date(`${f.end_date}T12:00:00`) -
+                  new Date(`${f.start_date}T12:00:00`)) /
+                  86400000,
+              ) + 1,
+        half_day_period: f.duration === "0.5" ? f.half_day_period : null,
+        half_day_start: f.duration === "0.5" ? f.half_day_start : null,
+        half_day_end: f.duration === "0.5" ? f.half_day_end : null,
+      });
+    if (kind === "PERMISSION")
+      Object.assign(body, {
+        permission_minutes: Number(f.permission_minutes),
+        duration_days: 1,
+      });
+    if (kind === "WFH")
+      Object.assign(body, {
+        duration_days:
+          Math.floor(
+            (new Date(`${f.end_date}T12:00:00`) -
+              new Date(`${f.start_date}T12:00:00`)) /
+              86400000,
+          ) + 1,
+      });
+    try {
+      await post("/time-off/requests", body);
+      setForm("");
+      refreshAll();
+      notify(
+        `${kind === "WFH" ? "WFH" : kind === "PERMISSION" ? "Permission" : "Leave"} request submitted.`,
+      );
+    } catch (e) {
+      notify(e.message);
+    }
+  }
+  return (
+    <>
+      <Heading
+        title="Leave, permission & WFH"
+        description="Submit requests and track your records."
+        actions={
+          <>
+            <Button tone="primary" onClick={() => setForm("LEAVE")}>
+              <Plus size={15} /> New leave
+            </Button>
+            <Button onClick={() => setForm("PERMISSION")}>
+              Request permission
+            </Button>
+            <Button onClick={() => setForm("WFH")}>Request WFH</Button>
+          </>
+        }
+      />
+      <div className="two-col">
+        <div className="stack">
+          {balance && (
+            <Panel className="balance-panel">
+              <div className="eyebrow">
+                FINANCIAL YEAR · {new Date().getFullYear()}–
+                {new Date().getFullYear() + 1}
+              </div>
+              <strong>
+                {(
+                  (balance.casual_leave_days || 0) +
+                  (balance.sick_leave_days || 0)
+                ).toFixed(1)}{" "}
+                <small>days available</small>
+              </strong>
+              <div className="balance-split">
+                <span>
+                  CASUAL LEAVE<b>{balance.casual_leave_days} days</b>
+                </span>
+                <span>
+                  SICK LEAVE<b>{balance.sick_leave_days} days</b>
+                </span>
+              </div>
+            </Panel>
+          )}
+          <Panel>
+            <SectionHead
+              title={
+                role === "EMPLOYEE" ? "My requests" : "Requests and approvals"
+              }
+              subtitle={
+                role === "MANAGER"
+                  ? "Your assigned team"
+                  : role === "HR"
+                    ? "Company requests · fallback decisions only"
+                    : role === "ADMIN"
+                      ? "Full company access"
+                      : "Request status and approval history"
+              }
+              action={
+                <select
+                  className="control compact"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="PENDING_MANAGER">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              }
+            />
+            {visible.map((r) => (
+              <div className="request-row" key={r.id}>
+                <span className="request-icon">
+                  <CalendarDays size={16} />
+                </span>
+                <div className="request-info">
+                  <b>
+                    {r.type === "LEAVE"
+                      ? `${r.leave_code === "CL" ? "Casual" : "Sick"} leave`
+                      : r.type === "WFH"
+                        ? "Work from home"
+                        : "Permission"}{" "}
+                    · {role === "EMPLOYEE" ? "You" : r.employee_name}
+                  </b>
+                  <small>
+                    {fmtDate(r.start_date)}
+                    {r.end_date !== r.start_date
+                      ? ` – ${fmtDate(r.end_date)}`
+                      : ""}
+                    {r.duration_days === 0.5
+                      ? ` · Half day ${r.half_day_period?.replace("_", " ").toLowerCase()} · ${r.half_day_start}–${r.half_day_end}`
+                      : ""}
+                    {r.permission_minutes
+                      ? ` · ${mins(r.permission_minutes)}`
+                      : ""}{" "}
+                    · {r.reason}
+                  </small>
+                  {r.manager_unavailable && (
+                    <small className="fallback-note">
+                      HR fallback · {r.fallback_reason}
+                    </small>
+                  )}
+                </div>
+                <div className="request-actions">
+                  <Badge
+                    tone={
+                      r.status === "APPROVED"
+                        ? "green"
+                        : r.status === "REJECTED"
+                          ? "red"
+                          : "amber"
+                    }
+                  >
+                    {r.status}
+                  </Badge>
+                  <RequestDecision
+                    item={r}
+                    account={account}
+                    role={role}
+                    onModal={onModal}
+                    endpoint={`/time-off/requests/${r.id}/decision`}
+                  />
+                  {(role === "HR" || role === "ADMIN") &&
+                    r.status === "PENDING_MANAGER" &&
+                    !r.manager_unavailable && (
+                      <Button onClick={() => setFallback(r)}>
+                        Delegate to HR
+                      </Button>
+                    )}
+                </div>
+              </div>
+            ))}
+            {!visible.length && <Empty>No requests to show.</Empty>}
+          </Panel>
+        </div>
+        <aside className="stack">
+          <Panel>
+            <SectionHead
+              title="Monthly allowances"
+              subtitle={balance?.as_of?.slice(0, 7)}
+            />
+            <div className="allowance-row">
+              <span>Permission</span>
+              <b>
+                {mins(balance?.permission_minutes_remaining)} remaining / 2h
+              </b>
+            </div>
+            <div className="progress">
+              <i
+                style={{
+                  width: `${Math.min(100, ((balance?.permission_minutes_used || 0) / 120) * 100)}%`,
+                }}
+              />
+            </div>
+            <div className="allowance-row">
+              <span>Work from home</span>
+              <b>{balance?.wfh_days_used ?? 0} / 4 days used</b>
+            </div>
+            <div className="progress green">
+              <i
+                style={{
+                  width: `${Math.min(100, ((balance?.wfh_days_used || 0) / 4) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="small-note">
+              Submit WFH in advance;
+            </p>
+          </Panel>
+          {/* <Panel>
+            <SectionHead title="Leave rules" />
+            <div className="policy-row">
+              <span>Monthly accrual</span>
+              <b>0.5 CL + 0.5 SL</b>
+            </div>
+            <div className="policy-row">
+              <span>Carry</span>
+              <b>Within FY; tenure rule at FY close</b>
+            </div>
+            <div className="policy-row">
+              <span>Full day</span>
+              <b>Apply before date</b>
+            </div>
+            <div className="policy-row">
+              <span>Half day</span>
+              <b>Same day, timing required</b>
+            </div>
+            <div className="policy-row">
+              <span>Multi-day leave</span>
+              <b>Full days only</b>
+            </div>
+          </Panel> */}
+        </aside>
+      </div>
+      {fallback && (
+        <Modal
+          title="Delegate request to HR"
+          description={`${fallback.employee_name} · ${fallback.type} · ${fmtDate(fallback.start_date)}`}
+          onClose={() => setFallback(null)}
+        >
+          <form className="form" onSubmit={delegateToHr}>
+            <label>
+              Why is the team manager unavailable?
+              <textarea
+                name="reason"
+                minLength={5}
+                required
+                placeholder="Manager is on leave / unavailable…"
+              />
+            </label>
+            <div className="modal-actions">
+              <Button onClick={() => setFallback(null)}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Delegate to HR
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {form && (
+        <Modal
+          title={
+            form === "WFH"
+              ? "Request work from home"
+              : form === "PERMISSION"
+                ? "Request permission"
+                : "New leave request"
+          }
+          description="Manager approval is the normal route; HR approves only after explicit fallback delegation."
+          onClose={() => setForm("")}
+        >
+          <form className="form" onSubmit={submit}>
+            {form === "LEAVE" && (
+              <>
+                <label>
+                  Leave type
+                  <select
+                    value={f.leave_code}
+                    onChange={(e) => update("leave_code", e.target.value)}
+                  >
+                    <option value="CL">Casual leave (CL)</option>
+                    <option value="SL">Sick leave (SL)</option>
+                  </select>
+                </label>
+                <div className="form-row">
+                  <label>
+                    Start date
+                    <input
+                      type="date"
+                      value={f.start_date}
+                      onChange={(e) => {
+                        update("start_date", e.target.value);
+                        if (!f.end_date) update("end_date", e.target.value);
+                      }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    End date
+                    <input
+                      type="date"
+                      value={f.end_date}
+                      onChange={(e) => update("end_date", e.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+                <label>
+                  Duration
+                  <select
+                    value={f.duration}
+                    onChange={(e) => update("duration", e.target.value)}
+                  >
+                    <option value="1">Full day(s)</option>
+                    <option value="0.5">Half day · single date</option>
+                  </select>
+                </label>
+                {f.duration === "0.5" && (
+                  <>
+                    <label>
+                      Half-day period
+                      <select
+                        value={f.half_day_period}
+                        onChange={(e) =>
+                          update("half_day_period", e.target.value)
+                        }
+                      >
+                        <option value="FIRST_HALF">First half</option>
+                        <option value="SECOND_HALF">Second half</option>
+                      </select>
+                    </label>
+                    <div className="form-row">
+                      <label>
+                        From
+                        <input
+                          type="time"
+                          value={f.half_day_start}
+                          onChange={(e) =>
+                            update("half_day_start", e.target.value)
+                          }
+                          required
+                        />
+                      </label>
+                      <label>
+                        To
+                        <input
+                          type="time"
+                          value={f.half_day_end}
+                          onChange={(e) =>
+                            update("half_day_end", e.target.value)
+                          }
+                          required
+                        />
+                      </label>
+                    </div>
+                    <Notice>
+                      Same-day half-day leave requires approval before the leave
+                      starts.
+                    </Notice>
+                  </>
+                )}
+              </>
+            )}
+            {form === "PERMISSION" && (
+              <>
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    value={f.start_date}
+                    onChange={(e) => update("start_date", e.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Duration (minutes)
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={f.permission_minutes}
+                    onChange={(e) =>
+                      update("permission_minutes", e.target.value)
+                    }
+                    required
+                  />
+                </label>
+                <Notice>
+                  2 hours per month are available without deduction. Excess is
+                  settled under the company’s leave/payroll rule.
+                </Notice>
+              </>
+            )}
+            {form === "WFH" && (
+              <>
+                <div className="form-row">
+                  <label>
+                    Start date
+                    <input
+                      type="date"
+                      value={f.start_date}
+                      onChange={(e) => update("start_date", e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    End date
+                    <input
+                      type="date"
+                      value={f.end_date}
+                      onChange={(e) => update("end_date", e.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+                <Notice>
+                  Request before the date then only you have able to check-in from home.
+                </Notice>
+              </>
+            )}
+            <label>
+              Reason
+              <textarea
+                value={f.reason}
+                onChange={(e) => update("reason", e.target.value)}
+                minLength={5}
+                required
+              />
+            </label>
+            <div className="modal-actions">
+              <Button onClick={() => setForm("")}>Cancel</Button>
+              <Button type="submit" tone="primary">
+                Submit for approval
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
 }
