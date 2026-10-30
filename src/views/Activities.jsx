@@ -39,8 +39,8 @@ export default function Activities({account,role,refresh,refreshAll,notify}) {
   async function submit(e) {
     e.preventDefault();setSaving(true)
     try {
-      await post('/activities',{activity_date:date,shift_code:shiftCode,start_time:startTime,end_time:endTime,description:description.trim()})
-      setShowForm(false);setDescription('');refreshAll();notify('Daily activity submitted.')
+      const created=await post('/activities',{activity_date:date,shift_code:shiftCode,start_time:startTime,end_time:endTime,description:description.trim()})
+      setShowForm(false);setDescription('');refreshAll();setView(created);notify('Daily activity submitted.')
     } catch(error) {notify(error.message)}
     finally {setSaving(false)}
   }
